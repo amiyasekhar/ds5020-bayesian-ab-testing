@@ -1,0 +1,685 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage[hidelinks]{hyperref}
+\usepackage{array}
+\usepackage{enumitem}
+\graphicspath{{../figures/}{figures/}{./}}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}{Proposition}
+\newtheorem{lemma}{Lemma}
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+\newtheorem{assumption}{Assumption}
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}
+
+\renewcommand{\Pr}{\operatorname{Pr}}
+\newcommand{\E}{\operatorname{E}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Bin}{\operatorname{Binomial}}
+\newcommand{\Ber}{\operatorname{Bernoulli}}
+\newcommand{\Betad}{\operatorname{Beta}}
+\newcommand{\Bfun}{\mathrm{B}}
+\newcommand{\ind}[1]{\mathbf{1}\{#1\}}
+\newcommand{\data}{\text{data}}
+\newcommand{\rulename}[1]{\ {[\emph{#1}]}}
+
+% --- generated files (the scripts write these; the report still compiles without them)
+\IfFileExists{sim_macros.tex}{\input{sim_macros.tex}}{%
+  \newcommand{\simxA}{92}\newcommand{\simxB}{121}\newcommand{\simn}{1000}\newcommand{\simM}{100{,}000}}
+\IfFileExists{data_macros.tex}{\input{data_macros.tex}}{%
+  \newcommand{\dataRows}{\emph{(run \texttt{src/load\_data.py})}}
+  \newcommand{\dataCols}{5}
+  \newcommand{\dataMissing}{\emph{(run \texttt{src/load\_data.py})}}}
+
+\title{DS5020 Final Project -- Iteration 2\\
+  \large Project 7: Bayesian A/B Testing\\
+  The Math Foundation: Definitions, Derivations, Data and Simulations}
+\author{Amiya Sekhar (solo team; project leader)\\
+  DS5020 Intro Linear Algebra \& Probability, Fall 2026}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We compare two versions of a product (A and B) by the fraction of visitors who ``click''.
+Each version's click count is modelled as $\Bin(n,p)$, a $\Betad(a,b)$ prior is placed on
+$p$, and the posterior is derived in closed form as $\Betad(a+x,\,b+n-x)$. We derive the
+posterior mean as a weighted average of the prior mean and the observed rate, the posterior
+variance, a Monte Carlo estimate of $\Pr(p_B>p_A\mid\data)$ with its standard error, and the
+two-proportion $z$ statistic as the frequentist comparison. Every result is checked on a
+simulation whose true click rates ($p_A=0.10$, $p_B=0.12$) are known.
+\end{abstract}
+
+\section*{Ownership}
+This is a one-person team, so every item below is owned by Amiya Sekhar. The ``checked'' column
+records a separate pass, done after a break, in which each derivation was re-read step by step and
+its numbers were confirmed against the simulation in \S\ref{sec:sim}.
+\begin{center}
+\begin{tabular}{llll}\toprule
+Item & Owner & Checked & Status\\ \midrule
+Notation, definitions, assumptions (\S\ref{sec:notation}--\S\ref{sec:assumptions}) & Amiya Sekhar & self-checked & done\\
+Theorems~\ref{thm:binom}--\ref{thm:conj} (Q1, Q2) & Amiya Sekhar & self-checked, simulation Q1--Q2 & done\\
+Theorem~\ref{thm:mean} (Q3) & Amiya Sekhar & self-checked, simulation Q3 & done\\
+Theorem~\ref{thm:mc} (Q4) & Amiya Sekhar & self-checked, simulation Q4 & done\\
+Theorem~\ref{thm:z} (Q5) & Amiya Sekhar & self-checked, simulation Q5 & done\\
+Algorithm (\S\ref{sec:algorithm}), data (\S\ref{sec:data}), simulation (\S\ref{sec:sim}) & Amiya Sekhar & self-checked & done\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% =====================================================================
+\section{Notation}\label{sec:notation}
+
+\begin{center}
+\small\begin{tabular}{>{$}l<{$} p{7.4cm} l}\toprule
+\text{Symbol} & Meaning & Dimension / set\\ \midrule
+A,\;B & the two versions (control, treatment) & labels\\
+n_A,\,n_B & number of visitors (trials) shown version $A$, $B$ & $\mathbb N$\\
+Y_{A,i} & outcome of visitor $i$ in version $A$: $1$ = click, $0$ = no click & $\{0,1\}$\\
+x_A,\,x_B & number of clicks, $x_A=\sum_{i=1}^{n_A}Y_{A,i}$ & $\{0,1,\dots,n\}$\\
+X_A,\,X_B & the click counts seen as random variables & $\Bin(n_A,p_A)$, $\Bin(n_B,p_B)$\\
+p_A,\,p_B & true (unknown) click probabilities & $[0,1]$\\
+\hat p_A,\,\hat p_B & observed rates $x_A/n_A$, $x_B/n_B$ & $[0,1]$\\
+\binom{n}{x} & binomial coefficient $n!/(x!(n-x)!)$ & $\mathbb N$\\
+L(p\mid x) & likelihood of $p$ given $x$ clicks in $n$ trials & $[0,1]$\\
+a,\,b & prior parameters of $\Betad(a,b)$ (we use $a=b=1$) & $(0,\infty)$\\
+\pi(p),\;\pi(p\mid x) & prior and posterior density of $p$ & densities on $[0,1]$\\
+m(x) & marginal (prior predictive) probability of $x$ & $[0,1]$\\
+\Gamma(\cdot),\;\Bfun(\cdot,\cdot) & Gamma function, Beta function & $(0,\infty)$\\
+\alpha_A,\beta_A & posterior parameters $a+x_A$, $b+n_A-x_A$ & $(0,\infty)$\\
+w & weight on the data in the posterior mean, $n/(a+b+n)$ & $(0,1)$\\
+\theta & $\Pr(p_B>p_A\mid\data)$, the quantity we report & $[0,1]$\\
+M & number of Monte Carlo draws & $\mathbb N$\\
+p_A^{(m)},\,p_B^{(m)} & $m$-th posterior draw, $m=1,\dots,M$ & $[0,1]$\\
+I_m & indicator $\ind{p_B^{(m)}>p_A^{(m)}}$ & $\{0,1\}$\\
+\hat\theta_M & Monte Carlo estimate $\frac1M\sum_m I_m$ & $[0,1]$\\
+\mathrm{SE} & standard error (standard deviation of an estimator) & $(0,\infty)$\\
+H_0 & null hypothesis $p_A=p_B$ & --\\
+\hat p & pooled rate $(x_A+x_B)/(n_A+n_B)$ & $[0,1]$\\
+z & two-proportion $z$ statistic & $\mathbb R$\\
+\Phi,\;z_{1-\alpha/2} & standard normal CDF and its $(1-\alpha/2)$ quantile & --\\
+\alpha & significance level (we use $0.05$) & $(0,1)$\\
+\mathbf 1,\;\ind{\cdot} & indicator of an event & $\{0,1\}$\\
+\bottomrule
+\end{tabular}\normalsize
+\end{center}
+
+% =====================================================================
+\section{Definitions}\label{sec:definitions}
+
+\begin{definition}[Bernoulli trial]
+A random variable $Y$ with $\Pr(Y=1)=p$ and $\Pr(Y=0)=1-p$, $p\in[0,1]$, is a
+$\Ber(p)$ trial. Its probability mass function can be written $\Pr(Y=y)=p^{y}(1-p)^{1-y}$, $y\in\{0,1\}$.
+\end{definition}
+
+\begin{definition}[Independence]
+Events $E_1,\dots,E_n$ are mutually independent if
+$\Pr(E_{i_1}\cap\cdots\cap E_{i_k})=\prod_{j=1}^k\Pr(E_{i_j})$ for every sub-collection.
+Random variables are independent if every collection of events $\{Y_i\in S_i\}$ is independent.
+Random variables that are independent and share one distribution are \emph{i.i.d.}
+\end{definition}
+
+\begin{definition}[Binomial distribution]
+$X\sim\Bin(n,p)$ if $\Pr(X=x)=\binom nx p^x(1-p)^{n-x}$ for $x\in\{0,\dots,n\}$.
+(Theorem~\ref{thm:binom} shows this is the distribution of a sum of $n$ i.i.d.\ $\Ber(p)$ trials.)
+\end{definition}
+
+\begin{definition}[Conditional probability and Bayes' theorem]
+For events with $\Pr(B)>0$, $\Pr(A\mid B)=\Pr(A\cap B)/\Pr(B)$. Hence
+$\Pr(A\mid B)=\Pr(B\mid A)\Pr(A)/\Pr(B)$ (Bayes' theorem). For a continuous parameter $p$
+with density $\pi(p)$ and an observation $x$ with $\Pr(x\mid p)=L(p\mid x)$, the
+\emph{posterior density} is
+\[
+\pi(p\mid x)=\frac{L(p\mid x)\,\pi(p)}{m(x)},\qquad m(x)=\int_0^1 L(p\mid x)\,\pi(p)\,dp .
+\]
+$\pi(p)$ is the \emph{prior}, $L(p\mid x)$ the \emph{likelihood} (the probability of the data seen as a
+function of $p$), and $m(x)$ the \emph{marginal likelihood}.
+\end{definition}
+
+\begin{definition}[Gamma and Beta functions]
+$\Gamma(s)=\int_0^\infty t^{s-1}e^{-t}\,dt$ for $s>0$; it satisfies $\Gamma(s+1)=s\Gamma(s)$ and
+$\Gamma(k)=(k-1)!$ for integers $k\ge1$. The Beta function is
+\[
+\Bfun(\alpha,\beta)=\int_0^1 t^{\alpha-1}(1-t)^{\beta-1}\,dt=\frac{\Gamma(\alpha)\Gamma(\beta)}{\Gamma(\alpha+\beta)},
+\qquad \alpha,\beta>0 .
+\]
+\end{definition}
+
+\begin{definition}[Beta distribution]
+$p\sim\Betad(\alpha,\beta)$, $\alpha,\beta>0$, if its density on $[0,1]$ is
+$f(p)=p^{\alpha-1}(1-p)^{\beta-1}/\Bfun(\alpha,\beta)$. $\Betad(1,1)$ is the uniform distribution.
+\end{definition}
+
+\begin{definition}[Conjugate prior]
+A family of priors is \emph{conjugate} to a likelihood if, for every prior in the family and every
+possible observation, the posterior is again in the family.
+\end{definition}
+
+\begin{definition}[Expectation, variance, indicator]
+For a discrete $Y$, $\E[Y]=\sum_y y\Pr(Y=y)$; for a continuous $p$ with density $f$, $\E[g(p)]=\int g(p)f(p)\,dp$.
+$\Var(Y)=\E[(Y-\E Y)^2]=\E[Y^2]-(\E Y)^2$. The indicator of an event $E$ is $\ind{E}=1$ if $E$
+occurs and $0$ otherwise; $\E[\ind{E}]=\Pr(E)$.
+\end{definition}
+
+\begin{definition}[Estimator, unbiasedness, standard error]
+An estimator $\hat\theta$ of $\theta$ is a function of the data (or of the random draws).
+It is \emph{unbiased} if $\E[\hat\theta]=\theta$. Its \emph{standard error} is
+$\mathrm{SE}(\hat\theta)=\sqrt{\Var(\hat\theta)}$.
+\end{definition}
+
+\begin{definition}[Monte Carlo estimator]
+If $\theta=\E[g(Z)]$ and $Z^{(1)},\dots,Z^{(M)}$ are i.i.d.\ copies of $Z$, the Monte Carlo estimator is
+$\hat\theta_M=\frac1M\sum_{m=1}^M g(Z^{(m)})$.
+\end{definition}
+
+\begin{definition}[Central limit theorem (statement used)]
+If $Y_1,\dots,Y_n$ are i.i.d.\ with mean $\mu$ and variance $\sigma^2<\infty$, then
+$\sqrt n(\bar Y_n-\mu)/\sigma\to N(0,1)$ in distribution. For $\Ber(p)$ trials
+($\mu=p$, $\sigma^2=p(1-p)$) this is the de Moivre--Laplace theorem:
+$\hat p=X/n$ is approximately $N\!\big(p,\;p(1-p)/n\big)$ for large $n$.
+\end{definition}
+
+\begin{definition}[Hypothesis test, test statistic, $p$-value]
+A null hypothesis $H_0$ is a statement about the parameters (here $p_A=p_B$).
+A test statistic $T$ is a function of the data whose distribution under $H_0$ is known
+(at least approximately). The two-sided $p$-value is $\Pr_{H_0}(|T|\ge|t_{\mathrm{obs}}|)$,
+and the test of size $\alpha$ rejects $H_0$ when the $p$-value is below $\alpha$.
+\end{definition}
+
+% =====================================================================
+\section{Connecting the data to the math}\label{sec:data-math}
+
+The real dataset is the \emph{Cookie Cats} mobile-game experiment (Kaggle): new players were
+randomly assigned to see the first ``gate'' at level 30 (version $A$, \texttt{gate\_30}) or at
+level 40 (version $B$, \texttt{gate\_40}).
+\begin{itemize}[nosep]
+\item \textbf{One row} of the data matrix is one player, i.e.\ one Bernoulli \emph{trial}.
+\item \textbf{One column} is one recorded variable: \texttt{userid}, \texttt{version},
+      \texttt{sum\_gamerounds} (rounds played in the first 14 days), \texttt{retention\_1},
+      \texttt{retention\_7}.
+\item \textbf{One entry} such as \texttt{retention\_7} for player $i$ is the outcome
+      $Y_i\in\{0,1\}$: a ``click'' is the player returning to the game 7 days (or 1 day) after installing.
+\item $n_A$ = number of rows with \texttt{version = gate\_30}; $x_A$ = number of those rows with
+      \texttt{retention\_7 = True}; likewise $n_B$, $x_B$ for \texttt{gate\_40}.
+\end{itemize}
+Everything the method needs from the data is therefore the four counts $(n_A,x_A,n_B,x_B)$,
+one set for 1-day retention and one for 7-day retention.
+
+% =====================================================================
+\section{Assumptions}\label{sec:assumptions}
+
+\begin{assumption}[Bernoulli outcomes with a common rate within a version]\label{as:bern}
+Within version $A$ every player clicks with the same probability $p_A$ (and likewise $p_B$).\\
+\emph{If it fails:} $X_A$ is not $\Bin(n_A,p_A)$; the true variance of $X_A$ is larger than $n_Ap_A(1-p_A)$
+(over-dispersion), so posteriors and the $z$ test are too confident.\\
+\emph{Check in Iteration 3:} split each version into random batches and compare the batch-to-batch
+variance of the rate with $\hat p(1-\hat p)/n_{\text{batch}}$; compare rates across strata of
+\texttt{sum\_gamerounds}.
+\end{assumption}
+
+\begin{assumption}[Independent trials]\label{as:indep}
+Outcomes of different players are independent.\\
+\emph{If it fails:} the product rule in Theorem~\ref{thm:binom} does not hold, the likelihood is wrong,
+and $\Var(\hat p)=p(1-p)/n$ (used in Theorem~\ref{thm:z}) is wrong.\\
+\emph{Check:} confirm \texttt{userid} is unique (no player counted twice) and that there is no
+obvious clustering (e.g.\ by install date, if available).
+\end{assumption}
+
+\begin{assumption}[Randomised assignment; $A$ and $B$ independent]\label{as:random}
+Version is assigned at random, so the two samples are independent and $p_A$, $p_B$ have independent
+posteriors.\\
+\emph{If it fails:} $\Pr(p_B>p_A\mid\data)$ can no longer be computed from the product of the two
+posteriors (Theorem~\ref{thm:mc}), and any difference may be confounding rather than the gate.\\
+\emph{Check:} compare the group sizes with what a fair coin would give (binomial test on $n_A$ vs
+$n_A+n_B$); compare the distribution of pre-gate behaviour (rounds played below level 30) across versions.
+\end{assumption}
+
+\begin{assumption}[Beta prior with $a,b>0$, chosen before seeing the data]\label{as:prior}
+\emph{If it fails:} with $a\le0$ or $b\le0$ the prior does not integrate; with a non-Beta prior the
+posterior is not Beta and must be computed numerically.\\
+\emph{Check:} repeat the analysis with $\Betad(1,1)$, $\Betad(0.5,0.5)$ and $\Betad(2,2)$ and report the
+change in $\theta$ (prior sensitivity); with $n\approx45{,}000$ the weight $w=n/(a+b+n)$ is $\approx1$, so the
+prior should matter very little.
+\end{assumption}
+
+\begin{assumption}[Large samples for the normal approximation]\label{as:clt}
+$n_Ap_A$, $n_A(1-p_A)$, $n_Bp_B$, $n_B(1-p_B)$ are all large (rule of thumb $\ge10$).\\
+\emph{If it fails:} $z$ is not approximately $N(0,1)$ under $H_0$, so the test does not have size $\alpha$.\\
+\emph{Check:} compute $n\hat p$ and $n(1-\hat p)$ on the data (they are in the thousands), and
+compare the rejection rate under a simulated null with $\alpha$ (done in \S\ref{sec:sim}).
+\end{assumption}
+
+\begin{assumption}[I.i.d.\ Monte Carlo draws]\label{as:mc}
+The $M$ posterior draws are independent and come exactly from the Beta posteriors.\\
+\emph{If it fails:} $\hat\theta_M$ may be biased and the standard error $\sqrt{\theta(1-\theta)/M}$ is wrong.\\
+\emph{Check:} the empirical standard deviation of $\hat\theta_M$ over repeated runs should fall like
+$M^{-1/2}$ (Figure~\ref{fig:mcse}); results should not change with the seed beyond the SE.
+\end{assumption}
+
+\begin{assumption}[No missing or corrupted outcomes]\label{as:missing}
+Every player has a recorded version and retention value.\\
+\emph{If it fails:} $n$ and $x$ are miscounted, and missingness that depends on the outcome biases $\hat p$.\\
+\emph{Check:} count missing values per column (\S\ref{sec:data}) and inspect extreme
+\texttt{sum\_gamerounds} values.
+\end{assumption}
+
+% =====================================================================
+\section{Derivations}\label{sec:derivations}
+
+\subsection{The binomial likelihood (Q1)}
+
+\begin{theorem}[Binomial likelihood]\label{thm:binom}
+Let $Y_1,\dots,Y_n$ be i.i.d.\ $\Ber(p)$ and $X=\sum_{i=1}^n Y_i$. Then
+\[
+\Pr(X=x\mid p)=\binom{n}{x}p^{x}(1-p)^{n-x},\qquad x=0,1,\dots,n,
+\]
+so the likelihood of $p$ given $x$ clicks in $n$ visits is $L(p\mid x)=\binom nx p^x(1-p)^{n-x}$.
+Moreover $L(p\mid x)$ is maximised at $\hat p=x/n$.
+\end{theorem}
+
+\begin{proof}
+\emph{Step 1 (probability of one particular sequence).}
+Fix a sequence $(y_1,\dots,y_n)\in\{0,1\}^n$ with exactly $x$ ones. By independence,
+\[
+\Pr(Y_1=y_1,\dots,Y_n=y_n)=\prod_{i=1}^n\Pr(Y_i=y_i)=\prod_{i=1}^n p^{y_i}(1-p)^{1-y_i}
+= p^{\sum y_i}(1-p)^{n-\sum y_i}=p^{x}(1-p)^{n-x}.
+\tag*{[\emph{independence; Bernoulli pmf; laws of exponents}]}
+\]
+\emph{Step 2 (how many such sequences).}
+The number of sequences of length $n$ with exactly $x$ ones is the number of ways to choose the
+positions of the ones, $\binom nx$. \rulename{counting / definition of the binomial coefficient}
+
+\emph{Step 3 (add them up).}
+The event $\{X=x\}$ is the disjoint union of the $\binom nx$ events ``the sequence equals $(y_1,\dots,y_n)$''
+over all sequences with $x$ ones. Probabilities of disjoint events add, and each has the probability from
+Step~1, so $\Pr(X=x\mid p)=\binom nx p^x(1-p)^{n-x}$. \rulename{additivity of probability}
+
+\emph{Step 4 (maximiser).}
+For $0<x<n$, $\ell(p)=\log L(p\mid x)=\log\binom nx+x\log p+(n-x)\log(1-p)$ and
+$\ell'(p)=\frac xp-\frac{n-x}{1-p}$. Setting $\ell'(p)=0$ gives $x(1-p)=(n-x)p$, i.e.\ $p=x/n$.
+Since $\ell''(p)=-\frac x{p^2}-\frac{n-x}{(1-p)^2}<0$, this is a maximum. For $x=0$ or $x=n$ the
+likelihood is monotone and the maximiser is the endpoint $x/n$.
+\rulename{log is increasing; first- and second-order conditions}
+\end{proof}
+
+\subsection{Beta--binomial conjugacy (Q2)}
+
+\begin{theorem}[Conjugacy]\label{thm:conj}
+If $p\sim\Betad(a,b)$ a priori and $X\mid p\sim\Bin(n,p)$, then
+\[
+p\mid X=x\;\sim\;\Betad(a+x,\;b+n-x).
+\]
+Hence the Beta family is conjugate to the binomial likelihood, and the marginal likelihood is
+$m(x)=\binom nx\,\Bfun(a+x,b+n-x)/\Bfun(a,b)$ (the Beta--binomial pmf).
+\end{theorem}
+
+\begin{proof}
+\emph{Step 1 (write down Bayes' theorem).}
+\[
+\pi(p\mid x)=\frac{L(p\mid x)\,\pi(p)}{m(x)},\qquad m(x)=\int_0^1 L(p\mid x)\pi(p)\,dp .
+\tag*{[\emph{Bayes' theorem for densities}]}
+\]
+\emph{Step 2 (multiply likelihood and prior).} By Theorem~\ref{thm:binom} and the Beta density,
+\[
+L(p\mid x)\,\pi(p)=\binom nx p^x(1-p)^{n-x}\cdot\frac{p^{a-1}(1-p)^{b-1}}{\Bfun(a,b)}
+=\frac{\binom nx}{\Bfun(a,b)}\;p^{(a+x)-1}(1-p)^{(b+n-x)-1}.
+\tag*{[\emph{Theorem~\ref{thm:binom}; Beta density; add exponents}]}
+\]
+\emph{Step 3 (normalising constant).} Integrate Step~2 over $p$. Because $a+x>0$ and $b+n-x>0$
+the integral is a Beta function:
+\[
+m(x)=\frac{\binom nx}{\Bfun(a,b)}\int_0^1 p^{(a+x)-1}(1-p)^{(b+n-x)-1}\,dp
+=\frac{\binom nx}{\Bfun(a,b)}\,\Bfun(a+x,\,b+n-x).
+\tag*{[\emph{definition of the Beta function}]}
+\]
+\emph{Step 4 (divide).} The constant $\binom nx/\Bfun(a,b)$ cancels:
+\[
+\pi(p\mid x)=\frac{p^{(a+x)-1}(1-p)^{(b+n-x)-1}}{\Bfun(a+x,\,b+n-x)},
+\]
+which is exactly the $\Betad(a+x,b+n-x)$ density. \rulename{definition of the Beta distribution}
+
+\emph{Step 5 (conjugacy).} The prior was in the Beta family and so is the posterior, for every
+$a,b>0$ and every $x\in\{0,\dots,n\}$; this is the definition of a conjugate family.
+\end{proof}
+
+\begin{remark}
+The posterior depends on the data only through $x$ and $n$: $a$ acts like $a$ ``prior clicks'' and $b$ like
+$b$ ``prior non-clicks''. Applying the theorem to each version separately (Assumption~\ref{as:random}) gives
+$p_A\mid\data\sim\Betad(\alpha_A,\beta_A)$ with $\alpha_A=a+x_A$, $\beta_A=b+n_A-x_A$, and similarly for $B$.
+\end{remark}
+
+\subsection{Posterior mean and variance (Q3)}
+
+\begin{lemma}[Moments of the Beta distribution]\label{lem:moments}
+If $p\sim\Betad(\alpha,\beta)$ then for every $k\ge0$,
+$\E[p^k]=\Bfun(\alpha+k,\beta)/\Bfun(\alpha,\beta)$. In particular
+\[
+\E[p]=\frac{\alpha}{\alpha+\beta},\qquad
+\E[p^2]=\frac{\alpha(\alpha+1)}{(\alpha+\beta)(\alpha+\beta+1)},\qquad
+\Var(p)=\frac{\alpha\beta}{(\alpha+\beta)^2(\alpha+\beta+1)} .
+\]
+\end{lemma}
+
+\begin{proof}
+\emph{Step 1.}
+\[
+\E[p^k]=\int_0^1 p^k\frac{p^{\alpha-1}(1-p)^{\beta-1}}{\Bfun(\alpha,\beta)}dp
+=\frac{1}{\Bfun(\alpha,\beta)}\int_0^1 p^{(\alpha+k)-1}(1-p)^{\beta-1}dp=\frac{\Bfun(\alpha+k,\beta)}{\Bfun(\alpha,\beta)}.
+\tag*{[\emph{definition of expectation; definition of the Beta function}]}
+\]
+
+\emph{Step 2.} Write both Beta functions with Gamma functions and use $\Gamma(s+1)=s\Gamma(s)$:
+\[
+\frac{\Bfun(\alpha+1,\beta)}{\Bfun(\alpha,\beta)}
+=\frac{\Gamma(\alpha+1)\Gamma(\beta)}{\Gamma(\alpha+\beta+1)}\cdot\frac{\Gamma(\alpha+\beta)}{\Gamma(\alpha)\Gamma(\beta)}
+=\frac{\alpha\,\Gamma(\alpha)}{(\alpha+\beta)\Gamma(\alpha+\beta)}\cdot\frac{\Gamma(\alpha+\beta)}{\Gamma(\alpha)}
+=\frac{\alpha}{\alpha+\beta}.
+\tag*{[\emph{$\Bfun=\Gamma\Gamma/\Gamma$; $\Gamma(s+1)=s\Gamma(s)$}]}
+\]
+Applying the same identity twice gives $\E[p^2]=\frac{\alpha(\alpha+1)}{(\alpha+\beta)(\alpha+\beta+1)}$.
+
+\emph{Step 3.}
+\begin{align*}
+\Var(p)&=\E[p^2]-(\E p)^2
+=\frac{\alpha(\alpha+1)}{(\alpha+\beta)(\alpha+\beta+1)}-\frac{\alpha^2}{(\alpha+\beta)^2}\\
+&=\frac{\alpha(\alpha+1)(\alpha+\beta)-\alpha^2(\alpha+\beta+1)}{(\alpha+\beta)^2(\alpha+\beta+1)}
+=\frac{\alpha\beta}{(\alpha+\beta)^2(\alpha+\beta+1)},
+\end{align*}
+since the numerator simplifies to $\alpha[(\alpha+1)(\alpha+\beta)-\alpha(\alpha+\beta+1)]=\alpha[\alpha+\beta-\alpha]=\alpha\beta$.
+\rulename{variance formula; algebra}
+\end{proof}
+
+\begin{theorem}[Posterior mean as a weighted average; posterior variance]\label{thm:mean}
+Under the model of Theorem~\ref{thm:conj},
+\[
+\E[p\mid x]=\frac{a+x}{a+b+n}=(1-w)\,\frac{a}{a+b}+w\,\frac{x}{n},
+\qquad w=\frac{n}{a+b+n}\in(0,1),
+\]
+i.e.\ the posterior mean is a convex combination of the prior mean $a/(a+b)$ (weight $1-w=\frac{a+b}{a+b+n}$)
+and the observed rate $x/n$ (weight $w$). Furthermore
+\[
+\Var(p\mid x)=\frac{(a+x)(b+n-x)}{(a+b+n)^2(a+b+n+1)} .
+\]
+\end{theorem}
+
+\begin{proof}
+\emph{Step 1.} By Theorem~\ref{thm:conj} the posterior is $\Betad(\alpha,\beta)$ with $\alpha=a+x$, $\beta=b+n-x$,
+so $\alpha+\beta=a+b+n$. \rulename{Theorem~\ref{thm:conj}}
+
+\emph{Step 2.} Lemma~\ref{lem:moments} gives $\E[p\mid x]=\frac{a+x}{a+b+n}$ and
+$\Var(p\mid x)=\frac{(a+x)(b+n-x)}{(a+b+n)^2(a+b+n+1)}$. \rulename{Lemma~\ref{lem:moments}}
+
+\emph{Step 3 (split the mean).} Write the numerator as $a+x$ and divide each piece by $a+b+n$:
+\[
+\frac{a+x}{a+b+n}=\frac{a}{a+b+n}+\frac{x}{a+b+n}
+=\underbrace{\frac{a+b}{a+b+n}}_{1-w}\cdot\frac{a}{a+b}
++\underbrace{\frac{n}{a+b+n}}_{w}\cdot\frac{x}{n}.
+\tag*{[\emph{multiply and divide by $a+b$ and by $n$}]}
+\]
+\emph{Step 4 (weights).} $w=\frac{n}{a+b+n}$ and $1-w=\frac{a+b}{a+b+n}$ are both in $(0,1)$ and sum to $1$,
+so the expression is a weighted average. As $n\to\infty$, $w\to1$: the data dominate the prior.
+\end{proof}
+
+\subsection[Monte Carlo estimate of Pr(pB > pA | data) (Q4)]{Monte Carlo estimate of $\Pr(p_B>p_A\mid\data)$ (Q4)}
+
+\begin{proposition}[Integral form of $\theta$]\label{prop:theta}
+If $p_A\mid\data\sim\Betad(\alpha_A,\beta_A)$ and $p_B\mid\data\sim\Betad(\alpha_B,\beta_B)$ are independent with
+densities $f_A,f_B$ and CDFs $F_A,F_B$, then
+\[
+\theta=\Pr(p_B>p_A\mid\data)=\int_0^1 f_B(t)\,F_A(t)\,dt .
+\]
+\end{proposition}
+\begin{proof}
+Condition on $p_B=t$: $\Pr(p_B>p_A\mid p_B=t)=\Pr(p_A<t)=F_A(t)$ by independence.
+Integrating against the density of $p_B$ (law of total probability for a continuous variable) gives the result.
+\rulename{independence; law of total probability}
+\end{proof}
+(This integral has no closed form in general, which is why we use Monte Carlo; in the simulation it is
+evaluated numerically only to check the Monte Carlo answer.)
+
+\begin{theorem}[Monte Carlo estimator: unbiasedness and standard error]\label{thm:mc}
+Let $(p_A^{(m)},p_B^{(m)})$, $m=1,\dots,M$, be i.i.d.\ draws with $p_A^{(m)}\sim\Betad(\alpha_A,\beta_A)$ and
+$p_B^{(m)}\sim\Betad(\alpha_B,\beta_B)$ independent, let $I_m=\ind{p_B^{(m)}>p_A^{(m)}}$ and
+$\hat\theta_M=\frac1M\sum_{m=1}^M I_m$. Then
+\[
+\E[\hat\theta_M]=\theta,\qquad
+\Var(\hat\theta_M)=\frac{\theta(1-\theta)}{M},\qquad
+\mathrm{SE}(\hat\theta_M)=\sqrt{\frac{\theta(1-\theta)}{M}}
+\;\approx\;\sqrt{\frac{\hat\theta_M(1-\hat\theta_M)}{M}} .
+\]
+\end{theorem}
+
+\begin{proof}
+\emph{Step 1 (each indicator is a Bernoulli).}
+$I_m$ takes values in $\{0,1\}$ and $\Pr(I_m=1)=\Pr\big(p_B^{(m)}>p_A^{(m)}\big)=\theta$, because the draw
+has the posterior distribution. So $I_m\sim\Ber(\theta)$, with $\E[I_m]=\theta$ and $\Var(I_m)=\theta(1-\theta)$.
+\rulename{expectation of an indicator; Bernoulli mean and variance}
+
+\emph{Step 2 (unbiased).}
+$\E[\hat\theta_M]=\E\big[\frac1M\sum_m I_m\big]=\frac1M\sum_m\E[I_m]=\frac1M\cdot M\theta=\theta$.
+\rulename{linearity of expectation}
+
+\emph{Step 3 (variance).}
+The $I_m$ are independent because the draws are, so the variance of the sum is the sum of the variances:
+\[
+\Var(\hat\theta_M)=\frac1{M^2}\Var\Big(\sum_{m=1}^M I_m\Big)=\frac1{M^2}\sum_{m=1}^M\Var(I_m)
+=\frac{M\,\theta(1-\theta)}{M^2}=\frac{\theta(1-\theta)}{M}.
+\tag*{[\emph{$\Var(cY)=c^2\Var(Y)$; independence $\Rightarrow$ variances add}]}
+\]
+\emph{Step 4 (standard error).} Take the square root. Since $\theta$ is unknown it is replaced by the
+unbiased estimate $\hat\theta_M$ (plug-in), giving the usable formula. By the CLT the error
+$\hat\theta_M-\theta$ is approximately $N(0,\theta(1-\theta)/M)$, so halving the SE requires four times as many draws.
+\rulename{definition of SE; plug-in; CLT}
+\end{proof}
+
+\subsection[The two-proportion z statistic (Q5)]{The two-proportion $z$ statistic (Q5)}
+
+\begin{theorem}[Two-proportion $z$ test]\label{thm:z}
+Let $X_A\sim\Bin(n_A,p_A)$ and $X_B\sim\Bin(n_B,p_B)$ be independent, $\hat p_A=X_A/n_A$, $\hat p_B=X_B/n_B$,
+and let $H_0:p_A=p_B=p$. Under $H_0$ and Assumption~\ref{as:clt},
+\[
+z=\frac{\hat p_B-\hat p_A}{\sqrt{\hat p(1-\hat p)\left(\frac1{n_A}+\frac1{n_B}\right)}},
+\qquad \hat p=\frac{X_A+X_B}{n_A+n_B},
+\]
+is approximately $N(0,1)$. The two-sided $p$-value is $2\big(1-\Phi(|z|)\big)$ and the test that rejects
+when $|z|>z_{1-\alpha/2}$ has size approximately $\alpha$.
+\end{theorem}
+
+\begin{proof}
+\emph{Step 1 (mean and variance of a sample proportion).}
+$\E[\hat p_A]=\frac1{n_A}\E[X_A]=\frac{n_Ap_A}{n_A}=p_A$ and
+$\Var(\hat p_A)=\frac1{n_A^2}\Var(X_A)=\frac{n_Ap_A(1-p_A)}{n_A^2}=\frac{p_A(1-p_A)}{n_A}$, using
+$\E[X_A]=n_Ap_A$ and $\Var(X_A)=n_Ap_A(1-p_A)$ (sum of $n_A$ independent Bernoullis, Theorem~\ref{thm:binom}).
+\rulename{linearity; independence $\Rightarrow$ variances add}
+
+\emph{Step 2 (normal approximation).} By the de Moivre--Laplace CLT,
+$\hat p_A\approx N\big(p_A,\frac{p_A(1-p_A)}{n_A}\big)$ and $\hat p_B\approx N\big(p_B,\frac{p_B(1-p_B)}{n_B}\big)$.
+\rulename{central limit theorem}
+
+\emph{Step 3 (difference of independent normals).} A difference of independent normals is normal, with
+means subtracting and variances adding:
+\[
+\hat p_B-\hat p_A\approx N\!\Big(p_B-p_A,\;\frac{p_A(1-p_A)}{n_A}+\frac{p_B(1-p_B)}{n_B}\Big).
+\tag*{[\emph{independence; properties of the normal family}]}
+\]
+\emph{Step 4 (impose $H_0$).} Under $H_0$, $p_A=p_B=p$, so the mean is $0$ and the variance becomes
+$p(1-p)\big(\frac1{n_A}+\frac1{n_B}\big)$; this is the \emph{pooled variance}.
+\rulename{substitution}
+
+\emph{Step 5 (estimate $p$ under $H_0$).} Under $H_0$ the two samples are $n_A+n_B$ i.i.d.\ $\Ber(p)$ trials
+with $X_A+X_B$ successes in total, so by Theorem~\ref{thm:binom} the likelihood is
+\[
+\binom{n_A}{x_A}\binom{n_B}{x_B}p^{x_A+x_B}(1-p)^{n_A+n_B-x_A-x_B},
+\]
+and its maximiser (Step~4 of that proof) is $\hat p=\frac{X_A+X_B}{n_A+n_B}$. \rulename{maximum likelihood under $H_0$}
+
+\emph{Step 6 (standardise).} Dividing the (approximately) $N(0,\sigma_0^2)$ variable of Step~4 by
+$\sigma_0=\sqrt{p(1-p)(1/n_A+1/n_B)}$ gives an approximate $N(0,1)$. Replacing $p$ by the consistent estimate
+$\hat p$ changes the denominator by a factor that tends to $1$, so the limit is unchanged (Slutsky's theorem).
+This yields $z\approx N(0,1)$. \rulename{standardisation; Slutsky}
+
+\emph{Step 7 ($p$-value and size).} For $Z\sim N(0,1)$, $\Pr(|Z|\ge|z|)=2(1-\Phi(|z|))$ by symmetry of the normal
+density, and $\Pr(|Z|>z_{1-\alpha/2})=\alpha$ by definition of the quantile, so the test has size $\alpha$.
+\rulename{symmetry of $N(0,1)$; definition of a quantile}
+\end{proof}
+
+% =====================================================================
+\section{Iteration 2 -- Math Questions}\label{sec:questions}
+
+\begin{enumerate}[label=\textbf{Q\arabic*.},leftmargin=*]
+\item \textbf{Binomial likelihood for $x$ clicks in $n$ visits.}
+  $L(p\mid x)=\binom nx p^x(1-p)^{n-x}$, derived in Theorem~\ref{thm:binom} from $n$ independent Bernoulli
+  trials: one sequence has probability $p^x(1-p)^{n-x}$, there are $\binom nx$ sequences with $x$ clicks, and
+  they are disjoint. Its maximiser is $x/n$.
+
+\item \textbf{Posterior from a $\Betad(a,b)$ prior.}
+  Theorem~\ref{thm:conj}: prior $\times$ likelihood $\propto p^{a+x-1}(1-p)^{b+n-x-1}$; the normalising
+  integral is $\Bfun(a+x,b+n-x)$; the result is the $\Betad(a+x,\,b+n-x)$ density. Conjugacy: the family is
+  closed under updating, and the update is ``add the clicks to $a$ and the non-clicks to $b$''.
+
+\item \textbf{Posterior mean and variance; the weighted average.}
+  Theorem~\ref{thm:mean}:
+  $\E[p\mid x]=\frac{a+x}{a+b+n}$, $\Var(p\mid x)=\frac{(a+x)(b+n-x)}{(a+b+n)^2(a+b+n+1)}$, and
+  $\E[p\mid x]=(1-w)\frac{a}{a+b}+w\frac xn$ with weights $1-w=\frac{a+b}{a+b+n}$ on the prior mean and
+  $w=\frac{n}{a+b+n}$ on the observed rate. With $a=b=1$ and $n=1000$, $w=1000/1002\approx0.998$.
+
+\item \textbf{Monte Carlo estimate of $\Pr(p_B>p_A\mid\data)$.}
+  Theorem~\ref{thm:mc}: $\hat\theta_M=\frac1M\sum_m\ind{p_B^{(m)}>p_A^{(m)}}$ is the average of i.i.d.\
+  $\Ber(\theta)$ indicators, so $\E[\hat\theta_M]=\theta$ (unbiased by linearity of expectation) and
+  $\mathrm{SE}=\sqrt{\theta(1-\theta)/M}\approx\sqrt{\hat\theta_M(1-\hat\theta_M)/M}$, which falls like $M^{-1/2}$.
+
+\item \textbf{Two-proportion $z$ statistic.}
+  Theorem~\ref{thm:z}: the CLT makes $\hat p_B-\hat p_A$ approximately normal with variance
+  $\frac{p_A(1-p_A)}{n_A}+\frac{p_B(1-p_B)}{n_B}$; under $H_0:p_A=p_B=p$ this is the pooled variance
+  $p(1-p)(\frac1{n_A}+\frac1{n_B})$, $p$ is estimated by $\hat p=\frac{x_A+x_B}{n_A+n_B}$, and
+  $z=\dfrac{\hat p_B-\hat p_A}{\sqrt{\hat p(1-\hat p)(1/n_A+1/n_B)}}\approx N(0,1)$.
+\end{enumerate}
+
+% =====================================================================
+\section{The algorithm as math}\label{sec:algorithm}
+
+\noindent\textbf{Input:} counts $n_A,x_A,n_B,x_B\in\mathbb N$; prior $a,b>0$; number of draws $M$; level $\alpha$.
+\textbf{Output:} posterior parameters, posterior means/variances, $\hat\theta_M$ with SE, and $(z,\,p\text{-value})$.
+
+\begin{enumerate}[leftmargin=*]
+\item \textbf{Posterior update} (Theorem~\ref{thm:conj}):
+  $\alpha_A=a+x_A$, $\beta_A=b+n_A-x_A$, $\alpha_B=a+x_B$, $\beta_B=b+n_B-x_B$.
+  \hfill Sizes: 4 scalars. Operations: 4 additions/subtractions, $O(1)$.
+\item \textbf{Posterior summaries} (Theorem~\ref{thm:mean}): for $v\in\{A,B\}$,
+  $\mu_v=\alpha_v/(\alpha_v+\beta_v)$, $\sigma_v^2=\alpha_v\beta_v/\big((\alpha_v+\beta_v)^2(\alpha_v+\beta_v+1)\big)$.
+  \hfill $O(1)$ (about 12 flops).
+\item \textbf{Draw from the posteriors:} $p_A^{(m)}\sim\Betad(\alpha_A,\beta_A)$,
+  $p_B^{(m)}\sim\Betad(\alpha_B,\beta_B)$ independently for $m=1,\dots,M$
+  (each Beta draw is $G_1/(G_1+G_2)$ with $G_1\sim\Gamma(\alpha,1)$, $G_2\sim\Gamma(\beta,1)$).
+  \hfill Sizes: two vectors $\mathbf p_A,\mathbf p_B\in[0,1]^M$. Operations: $2M$ draws, $O(M)$ expected time.
+\item \textbf{Indicators and average} (Theorem~\ref{thm:mc}):
+  $I_m=\ind{p_B^{(m)}>p_A^{(m)}}$, $\hat\theta_M=\frac1M\sum_{m=1}^M I_m$.
+  \hfill $M$ comparisons, $M-1$ additions, 1 division: $O(M)$.
+\item \textbf{Standard error:} $\widehat{\mathrm{SE}}=\sqrt{\hat\theta_M(1-\hat\theta_M)/M}$.
+  \hfill $O(1)$.
+\item \textbf{Frequentist comparison} (Theorem~\ref{thm:z}):
+  $\hat p=\frac{x_A+x_B}{n_A+n_B}$,
+  $z=\dfrac{x_B/n_B-x_A/n_A}{\sqrt{\hat p(1-\hat p)(1/n_A+1/n_B)}}$,
+  $p\text{-value}=2(1-\Phi(|z|))$; reject $H_0$ if $p\text{-value}<\alpha$.
+  \hfill $O(1)$ plus one evaluation of $\Phi$.
+\item \textbf{Decision:} report $\hat\theta_M\pm\widehat{\mathrm{SE}}$; declare $B$ better if $\hat\theta_M$ exceeds a
+  chosen threshold (e.g.\ $0.95$), alongside the $z$ test.
+\end{enumerate}
+\noindent\textbf{Totals:} time $O(M)$ (dominated by Step~3), memory $O(M)$ for the two draw vectors, or $O(1)$ if the
+sum in Step~4 is accumulated on the fly. The data enter only through four integers, so the cost does not grow with
+the number of players.
+
+% =====================================================================
+\section{Real data: Cookie Cats}\label{sec:data}
+
+\textbf{Source.} ``Mobile Games A/B Testing -- Cookie Cats'' (Kaggle), file \texttt{cookie\_cats.csv};
+loaded by \texttt{src/load\_data.py} with \texttt{pandas}.
+
+\textbf{Shape and variables.} \dataRows{} rows (players) and \dataCols{} columns:
+\begin{center}
+\begin{tabular}{llp{7.5cm}}\toprule
+column & type & meaning\\ \midrule
+\texttt{userid} & integer & anonymous player id (one row per player)\\
+\texttt{version} & categorical & \texttt{gate\_30} (version $A$) or \texttt{gate\_40} (version $B$)\\
+\texttt{sum\_gamerounds} & integer & rounds played during the first 14 days after install\\
+\texttt{retention\_1} & boolean & came back 1 day after installing ($Y_i$ for the 1-day test)\\
+\texttt{retention\_7} & boolean & came back 7 days after installing ($Y_i$ for the 7-day test)\\
+\bottomrule
+\end{tabular}
+\end{center}
+\textbf{Missing values:} \dataMissing{} missing entries in total (per-column counts are printed by the script).
+The design is balanced by randomisation (about 45{,}000 players per version). \texttt{sum\_gamerounds} is very
+right-skewed with a handful of extreme values; it is not used by the method but is a useful covariate for the
+checks in \S\ref{sec:assumptions}.
+
+\IfFileExists{data_summary.tex}{\input{data_summary.tex}}{%
+\begin{center}\emph{Table~\ref{tab:data} ($n$ and $x$ per version) is generated by \texttt{src/load\_data.py}
+once \texttt{data/cookie\_cats.csv} is in place.}\end{center}}
+
+\begin{figure}[h]\centering
+\includegraphics[width=0.48\textwidth]{retention_by_version.png}\hfill
+\includegraphics[width=0.48\textwidth]{gamerounds_hist.png}
+\caption{Left: 1-day and 7-day retention by version with 95\% normal intervals. Right: distribution of
+game rounds (log scale), showing the heavy right skew.}
+\end{figure}
+
+The method of \S\ref{sec:algorithm} is applied to these counts in Iteration~3; here the data are only loaded and
+described, as required.
+
+% =====================================================================
+\section{Simulation Check}\label{sec:sim}
+
+\textbf{Model and parameters.} Two independent binomial experiments with \emph{known} rates
+$p_A=0.10$, $p_B=0.12$ and $n=\simn$ visitors per version; prior $\Betad(1,1)$; $M=\simM$ posterior draws;
+$\alpha=0.05$; seed \texttt{np.random.default\_rng(0)}. The draw gave $x_A=\simxA$, $x_B=\simxB$.
+The experiment is then repeated $2000$ times, first with $p_A=p_B=0.10$ and then with $p_B=0.12$.
+Code: \texttt{src/simulation.py}; it uses only \texttt{numpy}, \texttt{matplotlib} and \texttt{scipy.stats}
+(\texttt{scipy.stats.beta} draws from the posterior and supplies a reference mean/variance; the method itself
+is our own formulas).
+
+\textbf{Results.} Table~\ref{tab:sim} compares every derived quantity with its true or theoretical value;
+Table~\ref{tab:mcse} shows how the Monte Carlo error shrinks with $M$.
+\IfFileExists{sim_tables.tex}{\input{sim_tables.tex}}{\begin{center}\emph{Run \texttt{src/simulation.py} to
+generate the tables.}\end{center}}
+
+\textbf{What each derivation's check shows (one sentence each).}
+\begin{itemize}[nosep]
+\item \emph{Theorem~\ref{thm:binom} (Q1):} our formula for $\log L(p\mid x)$ agrees with \texttt{scipy}'s binomial
+  log-pmf to machine precision on a grid of $20{,}001$ values of $p$, and the grid maximiser equals $x/n$.
+\item \emph{Theorem~\ref{thm:conj} (Q2):} normalising prior $\times$ likelihood numerically reproduces the
+  $\Betad(a+x,b+n-x)$ density with relative error $\sim10^{-14}$, confirming conjugacy.
+\item \emph{Theorem~\ref{thm:mean} (Q3):} $(1-w)\frac a{a+b}+w\frac xn$ equals $\frac{a+x}{a+b+n}$ and the
+  \texttt{scipy} posterior mean exactly, the variance formula matches, and both posterior means lie within about one
+  posterior standard deviation of the true $p_A$, $p_B$.
+\item \emph{Theorem~\ref{thm:mc} (Q4):} the Monte Carlo estimate of $\Pr(p_B>p_A\mid\data)$ agrees with the
+  quadrature value of Proposition~\ref{prop:theta} within one SE, and the empirical standard deviation of
+  $\hat\theta_M$ falls with log--log slope $\approx-0.5$ against $M$ (Figure~\ref{fig:mcse}).
+\item \emph{Theorem~\ref{thm:z} (Q5):} with $p_A=p_B$ the $z$ test rejects in about $5\%$ of $2000$ replications
+  and the histogram of $z$ matches $N(0,1)$ (Figure~\ref{fig:znull}); with $p_B=0.12$ the rejection rate is the
+  test's power at $n=1000$.
+\end{itemize}
+
+\begin{figure}[h]\centering
+\includegraphics[width=0.62\textwidth]{posteriors.png}
+\caption{Posterior densities for the simulated data; the dashed lines are the true rates $0.10$ and $0.12$.}
+\end{figure}
+
+\begin{figure}[h]\centering
+\begin{minipage}{0.48\textwidth}\centering
+\includegraphics[width=\textwidth]{mc_se.png}
+\caption{Empirical SE of $\hat\theta_M$ against $M$ on log--log axes, with the theoretical
+$\sqrt{\theta(1-\theta)/M}$.}\label{fig:mcse}
+\end{minipage}\hfill
+\begin{minipage}{0.48\textwidth}\centering
+\includegraphics[width=\textwidth]{z_null_hist.png}
+\caption{Distribution of $z$ over $2000$ experiments with $p_A=p_B$, against the $N(0,1)$ density.}\label{fig:znull}
+\end{minipage}
+\end{figure}
+
+\end{document}
