@@ -1,0 +1,432 @@
+% =====================================================================
+% Iteration 3: small worked example, from-scratch implementation, verification.
+% \input by report.tex.  Every number comes from a macro written by a script in src/.
+% =====================================================================
+\clearpage
+\part*{Iteration 3: Worked Example, Implementation and Verification}
+\addcontentsline{toc}{part}{Iteration 3}
+
+\section{Iteration 3 overview}\label{sec:it3-overview}
+
+\textbf{Leader.} This is a one-person team, so Amiya Sekhar leads again and owns and self-checks every item
+(the checks are the second-way checks and library comparisons reported below).
+
+\textbf{What stays the same as Iteration 2.} The dataset (Cookie Cats), the simulation model
+($p_A=0.10$, $p_B=0.12$, $n=\simn$ per version, prior $\Betad(1,1)$, $M=\simM$, $\alpha=0.05$) and the data seed
+\texttt{np.random.default\_rng(0)}: \texttt{simulate\_ab(seed=0)} returns the same $x_A=\simxA$, $x_B=\simxB$ as Iteration~2.
+The symbols are those of \S\ref{sec:notation}, and the code follows the numbered steps of \S\ref{sec:algorithm}.
+
+\textbf{What changed, and why.}
+\begin{itemize}[nosep]
+\item \emph{Posterior draws.} Iteration~2 drew from the posterior with \texttt{scipy.stats.beta.rvs}. The core method
+  must now be NumPy only, so Step~3 is implemented as written in \S\ref{sec:algorithm}: $p=G_1/(G_1+G_2)$ with
+  Gamma draws from NumPy, using seed~1 for the Monte Carlo stream (the handout's starter code). The Monte Carlo
+  estimate therefore changes from $0.9819$ to $\simThetaMC$; both are within two standard errors of the exact value $0.9821$.
+\item \emph{Numerical integration.} Iteration~2 evaluated Proposition~\ref{prop:theta} with SciPy's Beta CDF and a
+  trapezoid rule. It is now a from-scratch Simpson rule on a grid (\texttt{my\_grid\_prob}); SciPy's \texttt{quad} is used only to check it.
+\item \emph{Null repetitions.} The size of the $z$ test is checked with $1000$ repetitions (as the handout asks) instead of $2000$.
+\end{itemize}
+
+% =====================================================================
+\section{Small worked example}\label{sec:small}
+
+\textbf{Input (Question 1).} $A$: $x_A=3$ clicks in $n_A=10$ visits. $B$: $x_B=5$ clicks in $n_B=10$ visits.
+Prior $\Betad(a,b)=\Betad(1,1)$ (uniform). Script: \texttt{src/small\_example.py}; exact values use
+\texttt{fractions.Fraction}. The steps are the numbered steps of \S\ref{sec:algorithm}.
+
+\paragraph{Step 1: posterior update (Theorem~\ref{thm:conj}).}
+The posterior parameters are the prior parameters plus the clicks and the non-clicks:
+\[
+\alpha_A=a+x_A=1+3=4,\quad \beta_A=b+n_A-x_A=1+10-3=8,\qquad
+\alpha_B=1+5=6,\quad \beta_B=1+10-5=6 .
+\]
+So $p_A\mid\data\sim\Betad(4,8)$ and $p_B\mid\data\sim\Betad(6,6)$, with densities
+\[
+f_A(p)=\frac{p^{3}(1-p)^{7}}{\Bfun(4,8)}=1320\,p^3(1-p)^7,\qquad
+f_B(p)=\frac{p^{5}(1-p)^{5}}{\Bfun(6,6)}=2772\,p^5(1-p)^5,
+\]
+because $\Bfun(4,8)=\frac{3!\,7!}{11!}=\frac1{1320}$ and $\Bfun(6,6)=\frac{5!\,5!}{11!}=\frac1{2772}$.
+
+\paragraph{Step 2: posterior mean and variance (Theorem~\ref{thm:mean}).}
+\[
+\mu_A=\frac{4}{12}=\frac13,\qquad
+\sigma_A^2=\frac{\alpha_A\beta_A}{(\alpha_A+\beta_A)^2(\alpha_A+\beta_A+1)}=\frac{4\cdot 8}{12^2\cdot 13}=\frac{2}{117}\approx0.0171,
+\]
+\[
+\mu_B=\frac{6}{12}=\frac12,\qquad
+\sigma_B^2=\frac{6\cdot 6}{12^2\cdot 13}=\frac{1}{52}\approx0.0192 .
+\]
+The weighted-average form gives the same means: $w=\frac{n}{a+b+n}=\frac{10}{12}=\frac56$, so
+$\mu_A=\frac16\cdot\frac12+\frac56\cdot\frac3{10}=\frac1{12}+\frac14=\frac13$ and
+$\mu_B=\frac16\cdot\frac12+\frac56\cdot\frac12=\frac12$. With only 10 visits the prior still has weight $\frac16$:
+$\mu_A=0.333$ is pulled from the observed rate $0.3$ towards the prior mean $0.5$.
+
+\paragraph{Second-way check of Steps 1--2.}
+The densities are polynomials, so they can be integrated exactly with fractions. The script expands
+$f_A$ and $f_B$ and finds
+\begin{gather*}
+\int_0^1 f_A=1,\qquad \int_0^1 p\,f_A=\tfrac13,\qquad \int_0^1 p^2f_A-\big(\tfrac13\big)^2=\tfrac2{117};\\
+\int_0^1 f_B=1,\qquad \int_0^1 p\,f_B=\tfrac12,\qquad \int_0^1 p^2f_B-\big(\tfrac12\big)^2=\tfrac1{52}.
+\end{gather*}
+The posterior integrates to 1 and its mean and variance equal the formulas of Step~2 exactly. As a check of
+conjugacy itself, prior $\times$ likelihood, $\binom{10}{3}p^3(1-p)^7\cdot 1$, normalised numerically on a grid,
+agrees with the $\Betad(4,8)$ density to $\smConjErr$.
+
+\paragraph{Exact value of $\theta$ (Proposition~\ref{prop:theta}).}
+$F_A(t)=\int_0^t f_A(s)\,ds$ is a polynomial of degree 11, and $\theta=\int_0^1 f_B(t)F_A(t)\,dt$ is the integral
+of a polynomial. With exact fractions,
+\[
+\theta=\Pr(p_B>p_A\mid\data)=\smThetaExact\approx\smThetaExactDec .
+\]
+\emph{Second way.} For integer parameters the integral has the closed form
+\[
+\theta=\sum_{i=0}^{\alpha_B-1}\frac{\Bfun(\alpha_A+i,\;\beta_A+\beta_B)}{(\beta_B+i)\,\Bfun(1+i,\beta_B)\,\Bfun(\alpha_A,\beta_A)},
+\]
+and its six terms add to $\smThetaExact$ as well. Swapping the roles of $A$ and $B$ gives
+$\Pr(p_A>p_B\mid\data)=\smThetaSwap$, and the two probabilities add to 1.
+
+\paragraph{Step 3: draw from the posteriors.}
+$M=100{,}000$ draws $p^{(m)}=G_1/(G_1+G_2)$ with $G_1\sim\Gamma(\alpha,1)$, $G_2\sim\Gamma(\beta,1)$ (seed 1).
+The first five draws are
+\[
+p_A^{(m)}:\ \smDrawsA;\qquad p_B^{(m)}:\ \smDrawsB .
+\]
+The sample means of all draws are $\smSampleMeanA$ and $\smSampleMeanB$ (exact $\frac13$, $\frac12$).
+
+\paragraph{Step 4: indicators and their average (Theorem~\ref{thm:mc}).}
+$I_m=\ind{p_B^{(m)}>p_A^{(m)}}$; for the five draws above $I_m=\smInd$. The running average is $\smRunTen$ after
+10 draws, $\smRunThousand$ after 1000, and
+\[
+\hat\theta_M=\frac1M\sum_{m=1}^M I_m=\smThetaMC \quad\text{after } M=100{,}000 .
+\]
+
+\paragraph{Step 5: standard error.}
+$\widehat{\mathrm{SE}}=\sqrt{\hat\theta_M(1-\hat\theta_M)/M}=\smSE$ (Question 2). The error against the exact
+value is $|\hat\theta_M-\theta|=\smMCerr=\smNSE$ SE, the size Theorem~\ref{thm:mc} predicts.
+
+\paragraph{Check by numerical integration (Question 4).}
+\texttt{my\_grid\_prob} evaluates $\int f_B F_A$ on a grid: $F_A$ by a cumulative Simpson rule, then a Simpson rule
+for the outer integral. The answer converges to the exact fraction as the grid is refined:
+\begin{center}
+\begin{tabular}{rll}\toprule
+grid intervals & $\theta$ (grid) & error against $\smThetaExact$\\ \midrule
+8 & \smGridEight & $\smGridEightErr$\\
+40 & \smGridForty & $\smGridFortyErr$\\
+200 & \smGridTwoHundred & $\smGridTwoHundredErr$\\
+2000 & \smThetaGrid & $\smGridErr$\\
+\bottomrule\end{tabular}
+\end{center}
+On the same grid the density integrates to $\smIntfA$. The Monte Carlo estimate, the grid value and the exact
+fraction therefore agree: three computations of the same probability.
+
+\paragraph{Step 6: two-proportion $z$ (Theorem~\ref{thm:z}, Question 3).}
+\[
+\hat p=\frac{3+5}{10+10}=\frac25,\qquad
+\hat p(1-\hat p)\Big(\frac1{n_A}+\frac1{n_B}\Big)=\frac25\cdot\frac35\cdot\frac15=\frac6{125},\qquad
+z=\frac{\frac5{10}-\frac3{10}}{\sqrt{6/125}}=\sqrt{\frac56}\approx\smZ .
+\]
+The two-sided $p$-value is $2(1-\Phi(|z|))=\smP$. Here $n\hat p=4$ and $n(1-\hat p)=6$ are below 10, so
+Assumption~\ref{as:clt} does not hold and the normal approximation is rough.
+
+\paragraph{Step 7: decision and comparison.}
+The Bayesian answer is $\Pr(p_B>p_A\mid\data)\approx0.807$: $B$ is probably better, but this is below a $0.95$
+threshold. The $z$ test gives $p=\smP>0.05$ and does not reject $H_0$. Both say the same thing: 10 visits per
+version are not enough to separate $0.3$ from $0.5$. The numbers are also close: the one-sided $p$-value
+$1-\Phi(z)=\smPone$ is close to $\Pr(p_A\ge p_B\mid\data)=\smOneMinusTheta$. They are different statements (the
+first is a probability about data under $H_0$, the second a probability about the parameters given the data), and
+they differ here because the prior still has weight $\frac16$ and the normal approximation is rough at $n=10$.
+
+% =====================================================================
+\section{From-scratch implementation}\label{sec:impl}
+
+Each step of \S\ref{sec:algorithm} is one function in \texttt{src/methods.py}, written with NumPy only; the comment
+above each function is the equation in the table. The same functions run the small example, the simulation and
+the real data. \texttt{math.lgamma} and \texttt{math.erfc} (Python standard library) supply $\log\Gamma$ and the
+normal tail. SciPy appears only in the check scripts.
+
+\begin{center}\small
+\begin{tabular}{l l p{7.6cm}}\toprule
+Step & function & equation\\ \midrule
+1 & \texttt{my\_posterior} & $\alpha=a+x$, $\beta=b+n-x$ \hfill (Thm.~\ref{thm:conj})\\
+2 & \texttt{my\_post\_mean\_var} & $\mu=\frac{\alpha}{\alpha+\beta}$, $\sigma^2=\frac{\alpha\beta}{(\alpha+\beta)^2(\alpha+\beta+1)}$ \hfill (Thm.~\ref{thm:mean})\\
+2 & \texttt{my\_weighted\_mean} & $(1-w)\frac a{a+b}+w\frac xn$, $w=\frac n{a+b+n}$ \hfill (Thm.~\ref{thm:mean})\\
+3 & \texttt{my\_beta\_draws} & $p^{(m)}=G_1/(G_1+G_2)$, $G_1\sim\Gamma(\alpha,1)$, $G_2\sim\Gamma(\beta,1)$\\
+4 & \texttt{my\_indicator\_mean} & $\hat\theta_M=\frac1M\sum_m\ind{p_B^{(m)}>p_A^{(m)}}$ \hfill (Thm.~\ref{thm:mc})\\
+5 & \texttt{my\_mc\_se} & $\widehat{\mathrm{SE}}=\sqrt{\hat\theta_M(1-\hat\theta_M)/M}$ \hfill (Thm.~\ref{thm:mc})\\
+3--5 & \texttt{my\_mc\_prob} & Steps 3--5 together; returns $(\hat\theta_M,\widehat{\mathrm{SE}})$\\
+6 & \texttt{my\_z\_stat} & $z=\frac{x_B/n_B-x_A/n_A}{\sqrt{\hat p(1-\hat p)(1/n_A+1/n_B)}}$, $\hat p=\frac{x_A+x_B}{n_A+n_B}$ \hfill (Thm.~\ref{thm:z})\\
+6 & \texttt{my\_p\_value} & $2(1-\Phi(|z|))=\operatorname{erfc}(|z|/\sqrt2)$ \hfill (Thm.~\ref{thm:z})\\
+7 & \texttt{my\_decision} & $\hat\theta_M>0.95$; $p\text{-value}<\alpha$\\ \midrule
+-- & \texttt{my\_beta\_pdf} & $f(p)=p^{\alpha-1}(1-p)^{\beta-1}/\Bfun(\alpha,\beta)$, computed in logs\\
+-- & \texttt{my\_simpson}, \texttt{my\_cumsimpson} & $\int y\approx\frac h3(y_0+4y_1+2y_2+\dots+4y_{N-1}+y_N)$ and its running version\\
+-- & \texttt{my\_grid\_prob} & $\theta=\int_0^1 f_B(t)F_A(t)\,dt$ \hfill (Prop.~\ref{prop:theta})\\
+-- & \texttt{my\_check\_users}, \texttt{my\_counts} & data check; $n_v=\#\{\text{rows in }v\}$, $x_v=\sum_{i\in v}Y_i$ \hfill (\S\ref{sec:data-math})\\
+\bottomrule\end{tabular}\normalsize
+\end{center}
+
+\textbf{Grid.} The grid for Proposition~\ref{prop:theta} covers the part of $[0,1]$ within 12 posterior standard
+deviations of either posterior mean (for the small example this is all of $[0,1]$). This keeps 2000 intervals
+accurate when the posteriors are very narrow, as on the real data where $\sigma\approx0.002$.
+
+\sloppy
+\textbf{Simulation code.} \texttt{src/simulate.py} holds the Iteration~2 model as functions:
+\texttt{simulate\_ab(pA, pB, n, seed)} returns $(x_A,x_B,n)$, \texttt{simulate\_ab\_many} repeats the experiment,
+and \texttt{simulate\_ab\_users} / \texttt{simulate\_overlap\_many} produce the stress-test data in which some
+users are in both groups.\par\fussy
+
+% =====================================================================
+\section{Simulation test: recover the known truth}\label{sec:it3-sim}
+
+Script: \texttt{src/check\_simulation.py}. Data: the Iteration~2 experiment, $x_A=\simxA$, $x_B=\simxB$, $n=\simn$.
+
+\subsection{Comparison with a library}
+\begin{itemize}[nosep]
+\item $\theta$ on the grid is $\simThetaGrid$; \texttt{scipy.integrate.quad} gives $\simThetaLib$. Difference $\simGridErr$
+  (pass criterion $10^{-6}$).
+\item The Monte Carlo estimate is $\hat\theta_M=\simThetaMC\pm\simSE$, which is $\simNSE$ standard errors from the
+  \texttt{quad} value (pass criterion: below 3).
+\item Posterior means and variances against \texttt{scipy.stats.beta}: max difference $\simMomErr$. Our Beta density
+  against SciPy's on the whole grid: relative error $\simPdfErr$.
+\item $z=\simZ$, $p$-value $\simP$. SciPy has no two-proportion $z$ function, but $z^2$ equals Pearson's chi-square
+  statistic of the $2\times2$ table of clicks and non-clicks; against \texttt{chi2\_contingency} (no continuity
+  correction) the difference in $z^2$ is $\simZErr$ and in the $p$-value $\simPErr$.
+\end{itemize}
+\emph{Why the differences have these sizes.} The mean, variance and $z$ are closed formulas, so we and the library
+do the same arithmetic and agree to the last bit or to rounding ($10^{-16}$). The grid and \texttt{quad} are two
+different approximations of one integral, so they agree to the accuracy of the quadrature ($10^{-12}$). The Monte
+Carlo value is a random estimate, so it agrees only to its standard error ($4\times10^{-4}$); that is sampling
+error, not rounding. There is no sign or scaling convention to fix except the direction: $\theta$ is
+$\Pr(p_B>p_A)$, $z$ is positive when $B$ is ahead, and chi-square loses the sign, which is why $z^2$ is compared.
+
+\subsection{Comparison with the truth}
+With $n=\simn$: $\mu_A=\simMuA$ (sd $\simSdA$) and $\mu_B=\simMuB$ (sd $\simSdB$) against the true $0.10$ and $0.12$;
+$\|(\mu_A,\mu_B)-(p_A,p_B)\|_2=\simTruthErr$, and the larger error is $\simTruthSE$ posterior standard deviations.
+Table~\ref{tab:truth} repeats this for four sample sizes. Every single-run error is within 3 standard errors, and
+the root-mean-square error over 2000 repetitions follows $\sqrt{p(1-p)/n}$: on log--log axes the slopes are
+$\simSlopeA$ and $\simSlopeB$ (theory $-\frac12$), Figure~\ref{fig:errn}.
+
+\input{it3_sim_table.tex}
+
+\begin{figure}[ht]\centering
+\includegraphics[width=0.6\textwidth]{it3_error_vs_n.png}
+\caption{Error of the posterior mean against the true rate, on log--log axes. Filled markers: RMSE over 2000
+simulated experiments. Open markers: one experiment (seed 0). Dashed: $\sqrt{p_A(1-p_A)/n}$.}\label{fig:errn}
+\end{figure}
+
+\subsection{Size of the test}
+Repeating the whole experiment 1000 times with $p_A=p_B=0.10$, the $z$ test rejects in $\simNullRej$ of the runs
+(pass criterion $0.05\pm0.014$); $z$ has mean $\simNullZmean$ and standard deviation $\simNullZsd$ (theory $0$ and $1$).
+
+\subsection{Stress test: 10\% of the users are in both groups}
+\textbf{What is broken.} Assumption~\ref{as:random} (the two samples are independent) and
+Assumption~\ref{as:indep} (no player counted twice). Of the $n=1000$ users in each group, a fraction $f=0.10$
+(100 users) appears in both. Such a user saw both versions, so their one outcome is drawn with the average rate
+$\bar p=(p_A+p_B)/2$ and recorded in both groups.
+
+\textbf{What the math says.} Write $x_A=U_A+S$ and $x_B=U_B+S$, where $S\sim\Bin(fn,\bar p)$ is the shared count
+and $U_A\sim\Bin((1-f)n,p_A)$, $U_B\sim\Bin((1-f)n,p_B)$. Then $S$ cancels in the difference:
+\begin{gather*}
+\hat p_B-\hat p_A=\frac{U_B-U_A}{n},\qquad
+\E[\hat p_B-\hat p_A]=(1-f)(p_B-p_A),\\
+\Var(\hat p_B-\hat p_A)=(1-f)\,\frac{p_A(1-p_A)+p_B(1-p_B)}{n}.
+\end{gather*}
+So (i) the estimated difference is pulled towards $0$ by the factor $1-f$; (ii) $x_A$ and $x_B$ are positively
+correlated, $\operatorname{Cov}(x_A,x_B)=\Var(S)$, giving correlation $\approx f$; and (iii) the $z$ statistic
+divides by a standard deviation that is too large by $1/\sqrt{1-f}$, so under $H_0$ it has standard deviation
+$\sqrt{1-f}=0.949$ instead of $1$ and rejects with probability $2(1-\Phi(1.96/\sqrt{1-f}))=\strNullRejTheory$ instead of $0.05$.
+The posteriors are also wrong: each treats 1000 rows as 1000 independent trials, and their product treats $p_A$ and $p_B$ as independent.
+
+\textbf{What the simulation shows} (20{,}000 repetitions each):
+\begin{center}
+\begin{tabular}{lrr}\toprule
+quantity & clean & 10\% in both groups\\ \midrule
+correlation of $x_A$ and $x_B$ ($H_0$) & $\strCleanCorr$ & $+\strNullCorr$\\
+standard deviation of $z$ ($H_0$) & \strCleanNullSdZ & \strNullSdZ\\
+rejection rate of the $z$ test ($H_0$) & \strCleanNullRej & \strNullRej\\
+mean of $\hat p_B-\hat p_A$ (true difference $0.02$) & \strCleanAltDiff & \strAltDiff\\
+power of the $z$ test ($p_B=0.12$) & \strCleanAltPower & \strAltPower\\
+\bottomrule\end{tabular}
+\end{center}
+The test is no longer of size $0.05$, the effect is underestimated by 10\%, and power is lost
+(Figure~\ref{fig:stress} shows both effects growing with $f$).
+
+\textbf{The data check finds it.} On one stressed data set \texttt{my\_check\_users} reports $\strRows$ rows,
+$\strUnique$ unique users and $\strBoth$ users in both groups (the clean simulation gives $0$). As recorded the
+counts are $x_A/n_A=\strXA$ and $x_B/n_B=\strXB$; after removing the shared users they are $\strXAc$ and $\strXBc$,
+which are again independent binomial samples.
+
+\begin{figure}[ht]\centering
+\includegraphics[width=0.85\textwidth]{it3_stress.png}
+\caption{Stress test. Left: the estimated difference shrinks like $(1-f)(p_B-p_A)$. Right: the rejection rate of the
+$z$ test under $H_0$ falls below $0.05$ as predicted.}\label{fig:stress}
+\end{figure}
+
+% =====================================================================
+\section{Real data: run and verify}\label{sec:it3-real}
+
+Script: \texttt{src/run\_real.py}. $A$ = \texttt{gate\_30}, $B$ = \texttt{gate\_40}; a ``click'' is the player returning.
+
+\textbf{Cleaning steps (Question 5).}
+\begin{enumerate}[nosep]
+\item Rows read: \realRaw. Missing entries: \realMissing.
+\item Duplicate users: \realUnique{} unique \texttt{userid} values, so \realDup{} duplicate rows.
+\item Users in both groups: \realBoth.
+\item Rows removed in total: \realRemoved. Rows kept: \realClean.
+\item Group sizes: $n_A=\realNA$, $n_B=\realNB$; ratio $n_A/n_B=\realRatio$ (share of $A$: \realShareA).
+\item Transformations: \texttt{retention\_1} and \texttt{retention\_7} (True/False) are used as $Y_i=1/0$; nothing else is changed.
+\item Train/test split: none. The method estimates two rates and predicts nothing.
+\end{enumerate}
+
+\textbf{Results.} 1-day and 7-day retention are analysed separately (Table~\ref{tab:real}, Figure~\ref{fig:realpost}).
+\input{it3_real_table.tex}
+
+\begin{figure}[ht]\centering
+\includegraphics[width=0.9\textwidth]{it3_real_posteriors.png}
+\caption{Posterior densities of the retention rates on the real data.}\label{fig:realpost}
+\end{figure}
+
+\begin{itemize}[nosep]
+\item \emph{7-day retention.} $x_A/n_A=\realSevenRateA$, $x_B/n_B=\realSevenRateB$.
+  $\Pr(p_B>p_A\mid\data)=\realSevenThetaFive$, so $\Pr(p_A>p_B\mid\data)=\realSevenThetaA$: moving the gate to level 40
+  almost certainly lowers 7-day retention. The posterior mean of $p_B-p_A$ is $\realSevenDiff$ with 95\% interval
+  $[\realSevenLo,\ \realSevenHi]$. The $z$ test agrees: $z=\realSevenZ$, $p=\realSevenP$, $H_0$ rejected.
+\item \emph{1-day retention.} $x_A/n_A=\realOneRateA$, $x_B/n_B=\realOneRateB$.
+  $\Pr(p_A>p_B\mid\data)=\realOneThetaA$; the difference is $\realOneDiff$ with 95\% interval $[\realOneLo,\ \realOneHi]$,
+  which contains $0$. The $z$ test gives $z=\realOneZ$, $p=\realOneP$ and does not reject at $\alpha=0.05$.
+  The evidence points the same way as for 7 days but is weaker: the Bayesian rule ($\Pr>0.95$) already favours
+  $A$, while the two-sided test at $0.05$ does not reject.
+\item \emph{Bayesian and frequentist numbers side by side.} The one-sided $p$-value $\Phi(z)$ is $\realOnePhalf$ (1-day)
+  and $\realSevenPhalf$ (7-day); $\Pr(p_B>p_A\mid\data)$ is $\realOneThetaFive$ and $\realSevenThetaFive$. With
+  $n\approx45{,}000$ the prior has almost no weight and both posteriors are nearly normal, so the two numbers nearly
+  coincide, unlike in the small example.
+\end{itemize}
+
+\textbf{Library comparison.}
+\begin{center}\small
+\begin{tabular}{llll}\toprule
+quantity & compared with & 1-day & 7-day\\ \midrule
+$\mu_A,\mu_B,\sigma_A^2,\sigma_B^2$ & \texttt{scipy.stats.beta} & max$|\cdot|=\realOneMomErr$ & max$|\cdot|=\realSevenMomErr$\\
+Beta density on the grid & \texttt{stats.beta.pdf} & rel.\ $\realOnePdfErr$ & rel.\ $\realSevenPdfErr$\\
+$\theta$ (grid) & \texttt{integrate.quad} & $\realOneGridErr$ & $\realSevenGridErr$\\
+$\hat\theta_M$ & \texttt{integrate.quad} & \realOneNSE{} SE & \realSevenNSE{} SE\\
+$z^2$ & \texttt{chi2\_contingency} & rel.\ $\realOneZErr$ & rel.\ $\realSevenZErr$\\
+$p$-value & \texttt{chi2\_contingency} & $\realOnePErr$ & $\realSevenPErr$\\
+\bottomrule\end{tabular}\normalsize
+\end{center}
+\emph{Size of the differences.} As in the simulation: closed formulas agree to rounding; $z^2$ is now about $10$ and
+is built from counts near $20{,}000$, so its rounding error is $10^{-14}$ rather than $0$; the density differs in the
+11th digit because we compute $\log\Bfun$ with \texttt{lgamma} of arguments near $45{,}000$, where each
+$\log\Gamma$ is about $4\times10^5$ and the subtraction loses digits; the grid and \texttt{quad} agree to $10^{-12}$;
+Monte Carlo agrees to about one standard error. For 7-day retention $\theta$ is tiny, so although the absolute
+Monte Carlo error is small ($\widehat{\mathrm{SE}}=\realSevenSE$), the relative error
+$\sqrt{(1-\theta)/(\theta M)}$ is about 11\%; the grid value is the one to quote for a small probability.
+
+% =====================================================================
+\section{Verification table}\label{sec:verif}
+
+Every number is produced by one of the scripts \texttt{small\_example.py}, \texttt{check\_simulation.py}
+and \texttt{run\_real.py} in \texttt{src/}.
+\begin{center}\small
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{l l l l c}\toprule
+Data & Quantity & Compared with & Difference & Pass?\\ \midrule
+\rowsSmall
+\midrule
+\rowsSim
+\midrule
+\rowsReal
+\bottomrule
+\end{tabular}}\normalsize
+\end{center}
+
+% =====================================================================
+\section{Assumption checks}\label{sec:it3-assump}
+
+Script: \texttt{src/check\_assumptions.py}. Each check is run first on simulated data (the Iteration~2 model, 2000
+users assigned to $A$ or $B$ by a fair coin), where the assumption holds by construction, and then on Cookie Cats.
+Batches are consecutive blocks of rows in file order, which is increasing \texttt{userid}.
+
+\begin{center}\small
+\begin{tabular}{p{3.2cm} p{3.2cm} p{2.6cm} p{2.6cm} p{2.6cm}}\toprule
+Assumption & check & simulated & real, 1-day & real, 7-day\\ \midrule
+\ref{as:bern} common rate & $\chi^2_9$ over 10 batches: $A$; $B$ ($p$-values) &
+  \asSimXA{} (\asSimXAp); \asSimXB{} (\asSimXBp) & \asOneXA{} (\asOneXAp); \asOneXB{} (\asOneXBp) & \asSevenXA{} (\asSevenXAp); \asSevenXB{} (\asSevenXBp)\\
+\ref{as:indep} independence & duplicate rows; lag-1 autocorrelation $A$, $B$ ($z$) &
+  \asSimDup; $\asSimRA$ ($\asSimRAz$), $\asSimRB$ ($\asSimRBz$) & \asOneDup; $\asOneRA$ ($\asOneRAz$), $\asOneRB$ ($\asOneRBz$) &
+  \asSevenDup; $\asSevenRA$ ($\asSevenRAz$), $\asSevenRB$ ($\asSevenRBz$)\\
+\ref{as:random} randomised groups & users in both groups; $z$ for a 50/50 split ($p$) &
+  \asSimBoth; $\asSimSplitZ$ (\asSimSplitP) & \asOneBoth; $\asOneSplitZ$ (\asOneSplitP) & same groups\\
+\ref{as:prior} prior & range of $\theta$ over three priors & $\asSimPriorRange$ & $\asOnePriorRange$ & $\asSevenPriorRange$\\
+\ref{as:clt} large samples & smallest of $n\hat p$, $n(1-\hat p)$ & \asSimSmallest & \asOneSmallest & \asSevenSmallest\\
+\ref{as:mc} i.i.d.\ draws & sd of $\hat\theta_M$ over 30 seeds / SE formula & \asSimMcRatio & \asOneMcRatio & \asSevenMcRatio\\
+\ref{as:missing} no missing & missing entries & 0 & \asMissing & \asMissing\\
+\bottomrule\end{tabular}\normalsize
+\end{center}
+
+\textbf{What we found.}
+\begin{itemize}[nosep]
+\item \emph{Assumption~\ref{as:bern} (common rate).} On the real data the batch-to-batch variation of the rate is
+  what a binomial predicts (all four $p$-values are large). On the simulated data set the check for group $A$ gave
+  $p=\asSimXAp$ although the assumption is true there. This is a false alarm: over 500 simulated data sets the same
+  check gives $p<0.05$ in $\asSimAlarm$ of them, close to the $0.05$ it should. So a single small $p$-value from this
+  check is not proof of a problem, and a ``pass'' means a $p$-value that is not small.
+  Players are certainly not identical: 7-day retention is $\asStrataLow$ in the lowest quartile of
+  \texttt{sum\_gamerounds} and $\asStrataHigh$ in the highest. This does not break the binomial model, because each
+  player is a random draw from the population of players, so $\Pr(Y_i=1)=\E[p_i]=p_A$ for every row.
+\item \emph{Assumption~\ref{as:indep} (independence).} No \texttt{userid} is repeated, and neighbouring rows are
+  uncorrelated ($|z|<2$ in every case).
+\item \emph{Assumption~\ref{as:random} (randomisation).} No user is in both groups. The group sizes, however, are
+  $\asOneNA$ and $\asOneNB$: under a fair coin $n_A$ would be $\Bin(N,\frac12)$, and the observed split is
+  $z=\asOneSplitZ$ ($p=\asOneSplitP$) from 50/50. The simulated split gives $z=\asSimSplitZ$. This is a sample-ratio
+  mismatch: group $A$ has $\realFewer\%$ fewer players than group $B$. The method does not need equal group sizes, but it does need assignment to be unrelated
+  to the outcome, and an unexplained imbalance is a warning that it may not be (for example, players lost from one
+  group before being logged). We cannot test this further with the columns available; pre-gate behaviour is similar
+  (median rounds \asMedA{} and \asMedB, share with zero rounds \asZeroA{} and \asZeroB). We report it as a caveat.
+\item \emph{Assumption~\ref{as:prior} (prior).} $\theta$ changes by less than $10^{-5}$ between $\Betad(1,1)$,
+  $\Betad(\frac12,\frac12)$ and $\Betad(2,2)$ on the real data, because $w=\asOneW$.
+\item \emph{Assumption~\ref{as:clt} (large samples).} $n\hat p$ and $n(1-\hat p)$ are in the thousands on the real
+  data (and above 100 in the simulation), far above 10. In the small example they are 4 and 6, which is why the
+  normal approximation was only rough there.
+\item \emph{Assumption~\ref{as:mc} (Monte Carlo draws).} Over 30 seeds the standard deviation of $\hat\theta_M$
+  matches $\sqrt{\theta(1-\theta)/M}$ (ratios near 1).
+\item \emph{Assumption~\ref{as:missing} (missing values).} There are \asMissing{} missing entries. One player has
+  \asMaxRounds{} game rounds, an outlier, but \texttt{sum\_gamerounds} is not used by the method.
+\end{itemize}
+
+% =====================================================================
+\section{Iteration 3 -- Math Questions}\label{sec:it3-questions}
+
+\begin{enumerate}[label=\textbf{Q\arabic*.},leftmargin=*]
+\item \textbf{$A$: 3 clicks in 10 visits, $B$: 5 clicks in 10 visits, uniform prior.}
+  Posteriors: $p_A\mid\data\sim\Betad(4,8)$, $p_B\mid\data\sim\Betad(6,6)$.
+  Means: $\mu_A=\frac4{12}=\frac13$, $\mu_B=\frac6{12}=\frac12$.
+  Variances: $\sigma_A^2=\frac{4\cdot8}{12^2\cdot13}=\frac2{117}\approx0.0171$,
+  $\sigma_B^2=\frac{6\cdot6}{12^2\cdot13}=\frac1{52}\approx0.0192$ (standard deviations $0.131$ and $0.139$).
+  Checked by exact integration of the two densities (\S\ref{sec:small}).
+
+\item \textbf{$\Pr(p_B>p_A\mid\data)$ by Monte Carlo, 100{,}000 samples.}
+  $\hat\theta_M=\smThetaMC$ with standard error $\sqrt{\hat\theta_M(1-\hat\theta_M)/M}=\smSE$.
+  The exact value is $\smThetaExact=\smThetaExactDec$; the estimate is $\smNSE$ standard errors away.
+
+\item \textbf{Two-proportion $z$ statistic and comparison.}
+  $\hat p=\frac8{20}=\frac25$, $z=\dfrac{0.5-0.3}{\sqrt{\frac25\cdot\frac35\cdot\frac2{10}}}=\sqrt{5/6}=\smZ$,
+  two-sided $p$-value $\smP$: $H_0$ is not rejected at $\alpha=0.05$. The Bayesian conclusion is the same in
+  substance: $B$ is better with probability $0.807$, which is not strong evidence. The Bayesian number answers
+  ``how likely is it that $B$ is better, given these data?''; the $p$-value answers ``how surprising would these
+  data be if $A$ and $B$ were equal?''. With $n=10$ the normal approximation behind $z$ is rough
+  ($n\hat p=4<10$), while the Beta posterior is exact.
+
+\item \textbf{Check by numerical integration.}
+  $\theta=\int_0^1 f_B(t)F_A(t)\,dt$ with $F_A(t)=\int_0^t f_A(s)\,ds$, both on a grid of 2000 intervals with
+  Simpson's rule: $\theta\approx\smThetaGrid$, within $\smGridErr$ of the exact fraction and $\smNSE$ Monte Carlo
+  standard errors from $\hat\theta_M$. Monte Carlo and the grid agree.
+
+\item \textbf{All methods on the real dataset, after checking it.}
+  Checks: \realDup{} duplicate users, \realBoth{} users in both groups, \realMissing{} missing values; group sizes
+  $n_A=\realNA$ and $n_B=\realNB$ (ratio \realRatio; a small but statistically detectable imbalance,
+  \S\ref{sec:it3-assump}). Results (Table~\ref{tab:real}): for 7-day retention $\Pr(p_A>p_B\mid\data)=\realSevenThetaA$,
+  $z=\realSevenZ$, $p=\realSevenP$; for 1-day retention $\Pr(p_A>p_B\mid\data)=\realOneThetaA$, $z=\realOneZ$,
+  $p=\realOneP$. Keeping the gate at level 30 is better for 7-day retention by both methods. For 1-day retention the
+  evidence points the same way but is weaker: the posterior probability passes $0.95$, the two-sided $z$ test at
+  $0.05$ does not reject.
+\end{enumerate}

@@ -36,9 +36,18 @@
   \newcommand{\dataCols}{5}
   \newcommand{\dataMissing}{\emph{(run \texttt{src/load\_data.py})}}}
 
-\title{DS5020 Final Project -- Iteration 2\\
+% --- Iteration 3: numbers written by src/small_example.py, check_simulation.py, run_real.py, check_assumptions.py
+\input{it3_small.tex}
+\input{it3_sim.tex}
+\input{it3_real.tex}
+\input{it3_assump.tex}
+\input{it3_rows_small.tex}
+\input{it3_rows_sim.tex}
+\input{it3_rows_real.tex}
+
+\title{DS5020 Final Project -- Iteration 3\\
   \large Project 7: Bayesian A/B Testing\\
-  The Math Foundation: Definitions, Derivations, Data and Simulations}
+  Math Foundation (Iteration 2); Worked Example, From-Scratch Implementation and Verification (Iteration 3)}
 \author{Amiya Sekhar (solo team; project leader)\\
   DS5020 Intro Linear Algebra \& Probability, Fall 2026}
 \date{\today}
@@ -54,6 +63,9 @@ posterior mean as a weighted average of the prior mean and the observed rate, th
 variance, a Monte Carlo estimate of $\Pr(p_B>p_A\mid\data)$ with its standard error, and the
 two-proportion $z$ statistic as the frequentist comparison. Every result is checked on a
 simulation whose true click rates ($p_A=0.10$, $p_B=0.12$) are known.
+In Iteration~3 (from \S\ref{sec:it3-overview}) the method is worked by hand on a tiny example with exact fractions,
+implemented from scratch with NumPy, shown to recover the known truth on the simulation, and shown to agree with
+SciPy on the real Cookie Cats data.
 \end{abstract}
 
 \section*{Ownership}
@@ -61,6 +73,7 @@ This is a one-person team, so every item below is owned by Amiya Sekhar. The ``c
 records a separate pass, done after a break, in which each derivation was re-read step by step and
 its numbers were confirmed against the simulation in \S\ref{sec:sim}.
 \begin{center}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{llll}\toprule
 Item & Owner & Checked & Status\\ \midrule
 Notation, definitions, assumptions (\S\ref{sec:notation}--\S\ref{sec:assumptions}) & Amiya Sekhar & self-checked & done\\
@@ -69,8 +82,14 @@ Theorem~\ref{thm:mean} (Q3) & Amiya Sekhar & self-checked, simulation Q3 & done\
 Theorem~\ref{thm:mc} (Q4) & Amiya Sekhar & self-checked, simulation Q4 & done\\
 Theorem~\ref{thm:z} (Q5) & Amiya Sekhar & self-checked, simulation Q5 & done\\
 Algorithm (\S\ref{sec:algorithm}), data (\S\ref{sec:data}), simulation (\S\ref{sec:sim}) & Amiya Sekhar & self-checked & done\\
+\midrule
+Iteration 3: small worked example (\S\ref{sec:small}) & Amiya Sekhar & exact fractions, second-way checks & done\\
+Iteration 3: code \texttt{src/methods.py}, \texttt{simulate.py} (\S\ref{sec:impl}) & Amiya Sekhar & library comparison & done\\
+Iteration 3: simulation test and stress test (\S\ref{sec:it3-sim}) & Amiya Sekhar & truth and library & done\\
+Iteration 3: real data, verification table (\S\ref{sec:it3-real}--\S\ref{sec:verif}) & Amiya Sekhar & library comparison & done\\
+Iteration 3: assumption checks, math questions (\S\ref{sec:it3-assump}--\S\ref{sec:it3-questions}) & Amiya Sekhar & simulated data first & done\\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \end{center}
 
 % =====================================================================
@@ -681,5 +700,7 @@ $\sqrt{\theta(1-\theta)/M}$.}\label{fig:mcse}
 \caption{Distribution of $z$ over $2000$ experiments with $p_A=p_B$, against the $N(0,1)$ density.}\label{fig:znull}
 \end{minipage}
 \end{figure}
+
+\input{iteration3.tex}
 
 \end{document}
