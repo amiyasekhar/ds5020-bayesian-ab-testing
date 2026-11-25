@@ -1,8 +1,18 @@
 # DS5020 Final Project – Project 7: Bayesian A/B Testing
 
-Iteration 2: the math foundation (definitions, derivations, data and simulation).
-Iteration 3: a small worked example, a from-scratch implementation, and verification
-against the known truth (simulation) and against a library (real data).
+Does moving the Cookie Cats gate from level 30 to level 40 change how many players come
+back after 1 day and after 7 days? This repository holds the code, the final report and
+the presentation slides.
+
+**Result:** moving the gate to level 40 lowers 7-day retention.
+Pr(level 30 is better | data) = 0.9992; the posterior mean of p_B − p_A is −0.0082 with
+95% interval [−0.0133, −0.0031] (about 8 fewer of every 1,000 players); z test p-value 0.0016.
+1-day retention points the same way with weaker evidence (0.9628; p-value 0.0744).
+
+The project was built in iterations: Iteration 2 derived the math, ran a simulation and
+described the data; Iteration 3 added a hand-worked example, a from-scratch implementation
+and verification against the known truth and against SciPy; the final report puts it
+all together.
 
 ## Layout
 
@@ -10,7 +20,7 @@ against the known truth (simulation) and against a library (real data).
 src/        Python code
 data/       raw data (not tracked in Git; see below)
 figures/    plots produced by the scripts
-docs/       Overleaf report (report.tex + iteration3.tex → report.pdf) and the Excel project plan
+docs/       final report (report.tex → report.pdf), slides (slides.pdf) and the Excel project plan
 ```
 
 ## The method in one line
@@ -69,10 +79,10 @@ python3 src/load_data.py       # describes the data, writes figures/ and docs/da
 python3 src/simulation.py      # Iteration 2 simulation tables, writes figures/ and docs/sim_tables.tex
 ```
 
-## Report
+## Report and slides
 
-`docs/report.tex` is the Overleaf source; it `\input`s `docs/iteration3.tex`
-(the Iteration 3 sections) and the generated files `docs/sim_macros.tex`,
-`docs/sim_tables.tex`, `docs/data_macros.tex`, `docs/data_summary.tex` and
-`docs/it3_*.tex`. Upload all of these and the `figures/` folder to Overleaf.
-`docs/report.pdf` is the compiled report.
+`docs/report.tex` is the Overleaf source of the final report. It `\input`s only the
+generated files `docs/sim_macros.tex`, `docs/sim_tables.tex`, `docs/data_macros.tex`,
+`docs/data_summary.tex` and `docs/it3_*.tex`, so every number in the report comes from
+the scripts. Upload these and the `figures/` folder to Overleaf.
+`docs/report.pdf` is the compiled report and `docs/slides.pdf` the presentation slides.
